@@ -54,24 +54,35 @@ namespace MultiAgentCopilot.ChatInfrastructure.Services
                 PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase
             };
 
-
-            DefaultAzureCredential credential;
-            if (string.IsNullOrEmpty(_settings.UserAssignedIdentityClientID))
+            CosmosClient client;
+            // Prefer connection string if provided, else fallback to managed identity
+            if (!string.IsNullOrEmpty(_settings.CosmosKey))
             {
-                credential = new DefaultAzureCredential();
+                client = new CosmosClient(_settings.CosmosUri, _settings.CosmosKey, new CosmosClientOptions
+                {
+                    SerializerOptions = options,
+                    ConnectionMode = ConnectionMode.Gateway
+                });
             }
             else
             {
-                credential = new DefaultAzureCredential(new DefaultAzureCredentialOptions
+                DefaultAzureCredential credential;
+                if (string.IsNullOrEmpty(_settings.UserAssignedIdentityClientID))
                 {
-                    ManagedIdentityClientId = _settings.UserAssignedIdentityClientID
-                });
-
+                    credential = new DefaultAzureCredential();
+                }
+                else
+                {
+                    credential = new DefaultAzureCredential(new DefaultAzureCredentialOptions
+                    {
+                        ManagedIdentityClientId = _settings.UserAssignedIdentityClientID
+                    });
+                }
+                client = new CosmosClientBuilder(_settings.CosmosUri, credential)
+                    .WithSerializerOptions(options)
+                    .WithConnectionModeGateway()
+                    .Build();
             }
-            CosmosClient client = new CosmosClientBuilder(_settings.CosmosUri, credential)
-                .WithSerializerOptions(options)
-                .WithConnectionModeGateway()
-                .Build();
 
             _database = client?.GetDatabase(_settings.Database) ??
                         throw new ArgumentException("Unable to connect to existing Azure Cosmos DB database.");

@@ -73,26 +73,37 @@ namespace BankingServices.Services
                 PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase
             };
 
-            DefaultAzureCredential credential;
-            if (string.IsNullOrEmpty(_settings.UserAssignedIdentityClientID))
+            var jsonSerializerOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+
+            CosmosClient client;
+            // Prefer connection string if provided, else fallback to managed identity
+            if (!string.IsNullOrEmpty(_settings.CosmosKey))
             {
-                credential = new DefaultAzureCredential();
+                client = new CosmosClient(_settings.CosmosUri, _settings.CosmosKey, new CosmosClientOptions
+                {
+                    SerializerOptions = options,
+                    ConnectionMode = ConnectionMode.Gateway
+                });
             }
             else
             {
-                credential = new DefaultAzureCredential(new DefaultAzureCredentialOptions
+                DefaultAzureCredential credential;
+                if (string.IsNullOrEmpty(_settings.UserAssignedIdentityClientID))
                 {
-                    ManagedIdentityClientId = _settings.UserAssignedIdentityClientID
-                });
-
+                    credential = new DefaultAzureCredential();
+                }
+                else
+                {
+                    credential = new DefaultAzureCredential(new DefaultAzureCredentialOptions
+                    {
+                        ManagedIdentityClientId = _settings.UserAssignedIdentityClientID
+                    });
+                }
+                client = new CosmosClientBuilder(_settings.CosmosUri, credential)
+                    .WithSystemTextJsonSerializerOptions(jsonSerializerOptions)
+                    .WithConnectionModeGateway()
+                    .Build();
             }
-
-            var jsonSerializerOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
-
-            CosmosClient client = new CosmosClientBuilder(_settings.CosmosUri, credential)
-                .WithSystemTextJsonSerializerOptions(jsonSerializerOptions)
-                .WithConnectionModeGateway()
-            .Build();
 
             _database = client?.GetDatabase(_settings.Database) ??
                         throw new ArgumentException("Unable to connect to existing Azure Cosmos DB database.");
