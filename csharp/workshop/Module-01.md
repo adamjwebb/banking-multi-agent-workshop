@@ -160,27 +160,43 @@ public class SemanticKernelService : ISemanticKernelService, IDisposable
 
         builder.Services.AddSingleton<ILoggerFactory>(loggerFactory);
 
-        DefaultAzureCredential credential;
-        if (string.IsNullOrEmpty(_settings.AzureOpenAISettings.UserAssignedIdentityClientID))
+        // Prefer OpenAI Key if provided, else fallback to managed identity
+        if (!string.IsNullOrEmpty(_settings.AzureOpenAISettings.Key))
         {
-            credential = new DefaultAzureCredential();
+            builder.AddAzureOpenAIChatCompletion(
+                _settings.AzureOpenAISettings.CompletionsDeployment,
+                _settings.AzureOpenAISettings.Endpoint,
+                _settings.AzureOpenAISettings.Key);
+
+            builder.AddAzureOpenAITextEmbeddingGeneration(
+                _settings.AzureOpenAISettings.EmbeddingsDeployment,
+                _settings.AzureOpenAISettings.Endpoint,
+                _settings.AzureOpenAISettings.Key);
         }
         else
         {
-            credential = new DefaultAzureCredential(new DefaultAzureCredentialOptions
+            DefaultAzureCredential credential;
+            if (string.IsNullOrEmpty(_settings.AzureOpenAISettings.UserAssignedIdentityClientID))
             {
-                ManagedIdentityClientId = _settings.AzureOpenAISettings.UserAssignedIdentityClientID
-            });
-        }
-        builder.AddAzureOpenAIChatCompletion(
-            _settings.AzureOpenAISettings.CompletionsDeployment,
-            _settings.AzureOpenAISettings.Endpoint,
-            credential);
+                credential = new DefaultAzureCredential();
+            }
+            else
+            {
+                credential = new DefaultAzureCredential(new DefaultAzureCredentialOptions
+                {
+                    ManagedIdentityClientId = _settings.AzureOpenAISettings.UserAssignedIdentityClientID
+                });
+            }
+            builder.AddAzureOpenAIChatCompletion(
+                _settings.AzureOpenAISettings.CompletionsDeployment,
+                _settings.AzureOpenAISettings.Endpoint,
+                credential);
 
-        builder.AddAzureOpenAITextEmbeddingGeneration(
-               _settings.AzureOpenAISettings.EmbeddingsDeployment,
-               _settings.AzureOpenAISettings.Endpoint,
-               credential);
+            builder.AddAzureOpenAITextEmbeddingGeneration(
+                _settings.AzureOpenAISettings.EmbeddingsDeployment,
+                _settings.AzureOpenAISettings.Endpoint,
+                credential);
+        }
 
         _semanticKernel = builder.Build();
 
